@@ -9,6 +9,7 @@ from django.core.exceptions import ValidationError
 from django.conf import settings
 from django.dispatch import receiver
 from rest_framework.authtoken.models import Token
+from PIL import Image
 
 
 # Create your models here.
@@ -34,10 +35,10 @@ class UserManager(BaseUserManager):
         return user
 
     def create_user(self, email, password, **extra_fields):
-        return self._create_user(email, password, **extra_fields)
+        return self._create_user(email, password, False, False, **extra_fields)
 
     def create_superuser(self, email, password, **extra_fields):
-        user = self._create_user(self, email, password, **extra_fields)
+        user = self._create_user(email, password, True, True, **extra_fields)
         return user
 
 
@@ -58,3 +59,28 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def tokens(self):
         return ""
+
+
+class Profile(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="profile",
+    )
+    first_name = models.CharField(max_length=50, blank=True, null=True)
+    last_name = models.CharField(max_length=50, blank=True, null=True)
+    image = models.ImageField(upload_to="profiles", blank=True, null=True)
+    bio = models.TextField(null=True, blank=True)
+
+
+@receiver(models.signals.post_save, sender=settings.AUTH_USER_MODEL)
+def create_user_profile(sender, instance, created, **kwargs):
+    if created:
+        Profile.objects.create(user=instance)
+
+
+@receiver(models.signals.post_save, sender=settings.AUTH_USER_MODEL)
+def create_auth_token(sender, instance=None, created=False, **kwargs):
+    if created:
+        Token.objects.create(user=instance)
