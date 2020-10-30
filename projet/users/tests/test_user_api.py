@@ -8,7 +8,7 @@ from rest_framework.authtoken.models import Token
 # Create your tests here.
 
 
-class TestUserModels(APITestCase):
+class TestUserViews(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user("tes@email.com", "killmonger")
         self.create_user_url = reverse("create")
@@ -17,7 +17,7 @@ class TestUserModels(APITestCase):
 
     def test_user_create(self):
         data = {"email": "test@email.com", "password": "killmonger"}
-        self.client.post(self.create_user_url, data=data, format="json")
+        response = self.client.post(self.create_user_url, data=data, format="json")
         user = User.objects.get(email="test@email.com")
         self.assertEqual(data.get("email"), user.email)
 
