@@ -21,4 +21,6 @@ from users.views import LoginApiView
 urlpatterns = [
     path("login/", LoginApiView.as_view(), name="login"),
     path("create/", views.UserCreate.as_view(), name="create"),
+    path("list-users/", views.ListUsers.as_view(), name="list-users"),
+    path("profile/<int:pk>/", views.ProfileList.as_view(), name="profile"),
 ]

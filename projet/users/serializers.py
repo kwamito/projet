@@ -32,3 +32,19 @@ class UserValidateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ("id", "email", "password")
+
+
+class ProfileSerializer(serializers.ModelSerializer):
+    email = serializers.ReadOnlyField(source="user.email")
+    date_joined = serializers.ReadOnlyField(source="user.date_joined")
+
+    class Meta:
+        model = Profile
+        fields = (
+            "email",
+            "date_joined",
+            "first_name",
+            "last_name",
+            "image",
+            "bio",
+        )
