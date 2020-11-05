@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 from django.conf import settings
-from .models import User, Profile
+from .models import User, Profile, Contributor
 from rest_framework.authtoken.models import Token
 
 
@@ -10,6 +10,7 @@ class UserSerializer(serializers.ModelSerializer):
         required=True, validators=[UniqueValidator(queryset=User.objects.all())]
     )
     password = serializers.CharField(min_length=8)
+    image = serializers.ImageField(source="profile.image", required=False)
 
     def create(self, validated_data):
         user = User.objects._create_user(
@@ -19,7 +20,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ("id", "email", "password")
+        fields = ("id", "email", "password", "image")
 
 
 class UserValidateSerializer(serializers.ModelSerializer):
@@ -47,4 +48,28 @@ class ProfileSerializer(serializers.ModelSerializer):
             "last_name",
             "image",
             "bio",
+        )
+
+
+class ContributorSerializer(serializers.ModelSerializer):
+    profile_image = serializers.ImageField(
+        source="user.profile.image", read_only=True, required=False
+    )
+    user_email = serializers.ReadOnlyField(source="user.email")
+    accepted_date = serializers.ReadOnlyField(source="date_accepted")
+    project_id = serializers.ReadOnlyField(source="project.id")
+    project_name = serializers.ReadOnlyField(source="project.title")
+
+    class Meta:
+        model = Contributor
+        fields = (
+            "user",
+            "user_email",
+            "accepted",
+            "accepted_by",
+            "id",
+            "profile_image",
+            "accepted_date",
+            "project_id",
+            "project_name",
         )

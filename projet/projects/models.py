@@ -23,3 +23,6 @@ class Project(models.Model):
                 raise ValueError("Due date cannot be in the past.")
 
         super().save(*args, **kwargs)
+
+    def count_contributors(self):
+        return self.contributors.count()

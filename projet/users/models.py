@@ -28,7 +28,7 @@ class UserManager(BaseUserManager):
             is_active=True,
             last_login=now,
             date_joined=now,
-            **extra_fields
+            **extra_fields,
         )
         user.set_password(password)
         user.save(using=self.db)
@@ -72,6 +72,38 @@ class Profile(models.Model):
     last_name = models.CharField(max_length=50, blank=True, null=True)
     image = models.ImageField(upload_to="profiles", blank=True, null=True)
     bio = models.TextField(null=True, blank=True)
+
+
+class Contributor(models.Model):
+    user = models.ForeignKey(
+        User,
+        blank=False,
+        null=False,
+        on_delete=models.PROTECT,
+        related_name="contributions",
+    )
+    project = models.ForeignKey(
+        "projects.Project",
+        on_delete=models.CASCADE,
+        related_name="contributors",
+        unique=False,
+    )
+    accepted = models.BooleanField(default=False)
+    accepted_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, blank=True, null=True
+    )
+    date_accepted = models.DateTimeField(blank=True, null=True)
+    is_admin = models.BooleanField(default=False)
+
+    def get_profile(self):
+        return self.user.profile
+
+    def save(self, *args, **kwargs):
+        if self.user == self.project.user:
+            return ValidationError(
+                "You are the manager and cannot be a contributor to this project"
+            )
+        super(Contributor, self).save(*args, **kwargs)
 
 
 @receiver(models.signals.post_save, sender=settings.AUTH_USER_MODEL)
