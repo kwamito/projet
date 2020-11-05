@@ -30,6 +30,7 @@ class UserCreate(APIView):
         serializer = UserSerializer(data=request.data)
         # If the data passed into the serializer is valid we save it
         if serializer.is_valid():
+
             user = serializer.save()
             if user:
                 token = Token.objects.get(user=user)
@@ -39,6 +40,10 @@ class UserCreate(APIView):
                 return Response(json, status=status.HTTP_201_CREATED)
 
         elif serializer.is_valid() != True:
+            if len(serializer.data["password"]) < 8:
+                json = serializer.data
+                json["error"] = "Password should be 8 characters or longer"
+                return Response(json, status=status.HTTP_400_BAD_REQUEST)
             # Otherwise
             try:
                 User.objects.get(email=serializer.data["email"])
@@ -49,10 +54,6 @@ class UserCreate(APIView):
                 return Response(json, status=status.HTTP_401_UNAUTHORIZED)
             except User.DoesNotExist:
                 pass
-            if len(serializer.data["password"]) < 8:
-                json = serializer.data
-                json["error"] = "Password should be more than 8 characters long"
-                return Response(json, status=status.HTTP_400_BAD_REQUEST)
 
         else:
             json = serializer.data
