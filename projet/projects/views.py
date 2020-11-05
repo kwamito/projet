@@ -18,7 +18,7 @@ from django.core.exceptions import ValidationError, SuspiciousOperation
 
 # Create your views here.
 class ProjectCreateAPI(generics.ListCreateAPIView):
-    queryset = Project.objects.filter(is_public=True).order_by("-created")
+    queryset = Project.objects.filter(is_public=True)
     serializer_class = ProjectSerializer
     permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
 
