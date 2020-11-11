@@ -27,4 +27,26 @@ urlpatterns = [
         name="pending-accepted-contributors",
     ),
     path("contribute/<int:project_id>/", views.contribute, name="contribute"),
+    path(
+        "create-feature/<int:project_id>/",
+        views.CreateFeature.as_view(),
+        name="feature-create",
+    ),
+    path(
+        "feature-delete/<int:feature_id>/", views.delete_feature, name="delete-feature"
+    ),
+    path(
+        "approve-feature/<int:feature_id>/",
+        views.approve_feature,
+        name="approve-feature",
+    ),
+    path(
+        "review-feature/<int:feature_id>/", views.review_feature, name="review-feature"
+    ),
+    path(
+        "merge/<int:feature_id>/",
+        views.merge_features_documentation,
+        name="merge-feature",
+    ),
+    path("feature/<int:pk>/", views.FeatureDetail.as_view(), name="feature-detail"),
 ]
