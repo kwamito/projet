@@ -1,13 +1,13 @@
 from django.shortcuts import render
 from rest_framework import generics, permissions
 from rest_framework.views import APIView
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from users.models import User, Contributor
-from .models import Project
+from .models import Project, Feature
 from users.permissions import IsOwnerOrReadOnly
-from .serializers import ProjectSerializer
+from .serializers import ProjectSerializer, FeatureSerializer
 from rest_framework import status
 from users.serializers import ContributorSerializer
 from users.permissions import IsOwnerOrAdminOfProject, IsContributor
@@ -43,7 +43,7 @@ class UsersProjectsList(generics.ListAPIView):
 
 class AcceptContributor(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = ContributorSerializer
-    permission_classes = [IsAuthenticated, IsOwnerOrAdminOfProject]
+    permission_classes = [IsAuthenticated, IsOwnerOrAdminOfProject, IsOwnerOrReadOnly]
     queryset = Contributor.objects.all()
 
     def perform_update(self, serializer):
@@ -103,3 +103,151 @@ def get_project_pending_contributors(request, project_id, statum):
             )
             serializer = ContributorSerializer(accepted_contributors, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class CreateFeature(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, project_id, format=None):
+        project = Project.objects.get(id=project_id)
+
+        if (
+            Contributor.objects.filter(
+                user=request.user, project=project, accepted=True
+            ).exists()
+            is not True
+            and project.user != request.user
+        ):
+            error = "You have to be an accepted contributor or the project manager before you can make contributions."
+            return Response(error, status=status.HTTP_401_UNAUTHORIZED)
+
+        data = request.data
+        # _mutable = data._mutable
+
+        # # set to mutable
+        # data._mutable = True
+
+        # # сhange the values you want
+
+        # # set mutable flag back
+
+        data["project"] = str(project.id)
+        data["contributor"] = str(request.user.id)
+        # data._mutable = _mutable
+        serializer = FeatureSerializer(data=data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            error = "Could not save feature"
+            return Response(error, status=status.HTTP_400_BAD_REQUEST)
+        error = "Method not allowed"
+        return Response(error, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+
+class FeatureDetail(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = FeatureSerializer
+
+    def get_queryset(self):
+        return Feature.objects.filter(contributor=self.request.user)
+
+
+@api_view(["DELETE"])
+def delete_feature(request, feature_id=None):
+    if request.method == "DELETE":
+        try:
+
+            feature = Feature.objects.get(id=feature_id)
+
+            project = feature.project
+            if request.user == feature.contributor or request.user == project.user:
+                feature.delete()
+                return Response(
+                    f"{feature.name} has been deleted from {project.title}",
+                    status=status.HTTP_200_OK,
+                )
+
+            error = "You have to be the owner of this feature or manager of this project before you can delete."
+            return Response(error, status.HTTP_401_UNAUTHORIZED)
+        except Feature.DoesNotExist:
+            error = "Feature does not exist."
+            return Response(error, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(["PATCH"])
+def review_feature(request, feature_id, format=None):
+    if request.method == "PATCH":
+        try:
+            feature = Feature.objects.get(id=feature_id)
+            project = feature.project
+            if request.user == project.user:
+                feature.reviewed = True
+                feature.reviewed_by = request.user
+                feature.save()
+                return Response(
+                    f"{feature.name} has been reviewed and is awaiting approval.",
+                    status=status.HTTP_202_ACCEPTED,
+                )
+
+            error = "You have to be the manager/owner of this project before you can review this feature."
+            return Response(error, status.HTTP_401_UNAUTHORIZED)
+        except Feature.DoesNotExist:
+            error = "Feature does not exist. Might have been deleted."
+            return Response(error, status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["PATCH"])
+def approve_feature(request, feature_id, format=None):
+    if request.method == "PATCH":
+        try:
+            feature = Feature.objects.get(id=feature_id)
+            project = feature.project
+            if request.user == project.user:
+                if feature.reviewed != True:
+                    error = "Review this feature first."
+                    return Response(error, status=status.HTTP_406_NOT_ACCEPTABLE)
+                feature.approved = True
+                feature.save()
+                return Response(
+                    f"{feature.name} has been approved.",
+                    status=status.HTTP_202_ACCEPTED,
+                )
+
+            error = "You have to be the manager/owner of this project before you can approve it."
+            return Response(error, status.HTTP_401_UNAUTHORIZED)
+        except Feature.DoesNotExist:
+            error = "Feature does not exist. Might have been deleted."
+            return Response(error, status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["PATCH"])
+def merge_features_documentation(request, feature_id):
+    if request.method == "PATCH":
+        try:
+            feature = Feature.objects.get(id=feature_id)
+            project = feature.project
+            if request.user == project.user:
+                if feature.approved != True:
+                    error = "Approve this feature first."
+                    return Response(error, status=status.HTTP_406_NOT_ACCEPTABLE)
+
+                if project.documentation == None:
+                    project.documentation = feature.documentation
+                else:
+                    project.documentation = (
+                        project.documentation + "\n" + feature.documentation
+                    )
+                project.save()
+                feature.merged = True
+                feature.date_merged = timezone.now()
+                feature.save()
+                return Response(
+                    f"{feature.name} has been merged.",
+                    status=status.HTTP_202_ACCEPTED,
+                )
+
+            error = "You have to be the manager/owner of this project before you can merge it."
+            return Response(error, status.HTTP_401_UNAUTHORIZED)
+        except Feature.DoesNotExist:
+            error = "Feature does not exist. Might have been deleted."
+            return Response(error, status.HTTP_400_BAD_REQUEST)
