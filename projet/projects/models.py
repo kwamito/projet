@@ -4,6 +4,7 @@ from PIL import Image
 from django.core.exceptions import ValidationError
 from django.utils import timezone, timesince
 from djmoney.models.fields import MoneyField
+from decimal import ROUND_UP
 
 # Create your models here.
 class Project(models.Model):
@@ -28,6 +29,52 @@ class Project(models.Model):
 
     def count_contributors(self):
         return self.contributors.count()
+
+    def total_expenditure(self):
+        try:
+            expenses = Expense.objects.filter(project__id=self.id)
+            total = 0
+            for amount in expenses:
+                total += amount.amount.amount
+            return total
+        except Expense.DoesNotExist:
+            return ""
+
+    def over_budget_by(self):
+        try:
+            budget = Budget.objects.get(project__id=self.id)
+            expenses = Expense.objects.filter(project__id=self.id)
+            budget_amount = budget.amount.amount
+            total = 0
+            for value in expenses:
+                total += value.amount.amount
+            if total > budget_amount:
+                over = total - budget_amount
+                return f"Over budget by {budget.amount_currency}{over}"
+            else:
+                return f""
+        except Budget.DoesNotExist:
+            return ""
+
+    def over_budget_by_percentage(self):
+        try:
+            budget = Budget.objects.get(project__id=self.id)
+            expenses = Expense.objects.filter(project__id=self.id)
+            budget_amount = budget.amount.amount
+            total = 0
+            percentage = 0
+            for value in expenses:
+                total += value.amount.amount
+            if total > budget_amount:
+                percentage = total - budget_amount
+                percentage = percentage / budget_amount
+                percentage = percentage * 100
+                percentage = round(percentage)
+                return f"{percentage}%"
+            else:
+                return ""
+        except Budget.DoesNotExist:
+            return ""
 
 
 class Feature(models.Model):
@@ -76,3 +123,73 @@ class Feature(models.Model):
                 raise ValueError("Due date cannot be in the past.")
 
         super().save(*args, **kwargs)
+
+
+class Budget(models.Model):
+    FLEXIBILITY_CHOICES = [("F", "Flexible"), ("T", "Tight")]
+    amount = MoneyField(
+        max_digits=14, decimal_places=2, default_currency="USD", null=False, blank=False
+    )
+    project = models.ForeignKey(
+        Project,
+        blank=False,
+        null=False,
+        on_delete=models.CASCADE,
+        related_name="budget",
+    )
+    date_created = models.DateTimeField(auto_now_add=True)
+    budget_type = models.CharField(
+        choices=FLEXIBILITY_CHOICES, max_length=10, default="F"
+    )
+
+    def get_project(self):
+        return Project.objects.get(id=self.project.id)
+
+    def __str__(self):
+        return f"{self.amount_currency}{self.amount}"
+
+
+class BudgetHistory(models.Model):
+    budget = models.ForeignKey(
+        Budget,
+        on_delete=models.CASCADE,
+        blank=False,
+        null=False,
+        related_name="history",
+    )
+    from_amount = MoneyField(
+        max_digits=14, decimal_places=2, default_currency="USD", null=True, blank=True
+    )
+    to_amount = MoneyField(
+        max_digits=14, decimal_places=2, default_currency="USD", null=True, blank=True
+    )
+    date_updated = models.DateTimeField(default=timezone.now())
+
+    def determine(self):
+        if self.to_amount < self.from_amount:
+            return "Decrease"
+        elif self.to_amount > self.from_amount:
+            return "Increase"
+        else:
+            return ""
+
+    def __str__(self):
+        return f"From {self.from_amount} to {self.to_amount}"
+
+
+class Expense(models.Model):
+    contributor = models.ForeignKey(
+        User, on_delete=models.PROTECT, null=False, blank=False, related_name="expenses"
+    )
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        null=False,
+        blank=False,
+        related_name="spendings",
+    )
+    description = models.CharField(max_length=300, null=True, blank=True)
+    amount = MoneyField(
+        max_digits=14, decimal_places=2, default_currency="USD", null=True, blank=True
+    )
+    date_expended = models.DateTimeField(default=timezone.now())

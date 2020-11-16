@@ -49,4 +49,24 @@ urlpatterns = [
         name="merge-feature",
     ),
     path("feature/<int:pk>/", views.FeatureDetail.as_view(), name="feature-detail"),
+    path(
+        "budget-create/<int:project_id>/",
+        views.CreateRetrieveUpdateDeleteBudget.as_view(),
+        name="budget-create",
+    ),
+    path(
+        "budget-history/<int:project_id>/<int:history_id>/",
+        views.budget_history,
+        name="budget-history",
+    ),
+    path(
+        "expense-create/<int:project_id>/",
+        views.CreateExpense.as_view(),
+        name="expense-create",
+    ),
+    path(
+        "expense/<int:project_id>/<int:expense_id>/",
+        views.expense_detail_update_delete,
+        name="expense-detail-delete",
+    ),
 ]

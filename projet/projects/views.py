@@ -5,15 +5,22 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from users.models import User, Contributor
-from .models import Project, Feature
+from .models import Project, Feature, Budget, BudgetHistory, Expense
 from users.permissions import IsOwnerOrReadOnly
-from .serializers import ProjectSerializer, FeatureSerializer
+from .serializers import (
+    ProjectSerializer,
+    FeatureSerializer,
+    BudgetSerializer,
+    BudgetHistorySerializer,
+    ExpenseSerializer,
+)
 from rest_framework import status
 from users.serializers import ContributorSerializer
-from users.permissions import IsOwnerOrAdminOfProject, IsContributor
+from users.permissions import IsOwnerOrAdminOfProject, IsContributor, IsOwnerOrReadOnly
 import json
 from django.utils import timezone
 from django.core.exceptions import ValidationError, SuspiciousOperation
+from projects.custom_permissions import TestIfContributor
 
 
 # Create your views here.
@@ -106,34 +113,26 @@ def get_project_pending_contributors(request, project_id, statum):
 
 
 class CreateFeature(APIView):
-    permission_classes = [IsAuthenticated]
+    queryset = Feature.objects.all()
+    permission_classes = [
+        IsAuthenticated,
+    ]
 
     def post(self, request, project_id, format=None):
         project = Project.objects.get(id=project_id)
 
-        if (
-            Contributor.objects.filter(
-                user=request.user, project=project, accepted=True
-            ).exists()
-            is not True
-            and project.user != request.user
-        ):
+        # Replaced repeated test of whether a user is a conributor with a reusable function that does so
+        test = TestIfContributor(request.user, project)
+
+        if test.test_is_contributor_or_manager() is not True:
             error = "You have to be an accepted contributor or the project manager before you can make contributions."
             return Response(error, status=status.HTTP_401_UNAUTHORIZED)
 
         data = request.data
-        # _mutable = data._mutable
-
-        # # set to mutable
-        # data._mutable = True
-
-        # # сhange the values you want
-
-        # # set mutable flag back
 
         data["project"] = str(project.id)
         data["contributor"] = str(request.user.id)
-        # data._mutable = _mutable
+
         serializer = FeatureSerializer(data=data)
         if serializer.is_valid():
             serializer.save()
@@ -147,6 +146,9 @@ class CreateFeature(APIView):
 
 class FeatureDetail(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = FeatureSerializer
+    permission_classes = [
+        IsOwnerOrReadOnly,
+    ]
 
     def get_queryset(self):
         return Feature.objects.filter(contributor=self.request.user)
@@ -251,3 +253,139 @@ def merge_features_documentation(request, feature_id):
         except Feature.DoesNotExist:
             error = "Feature does not exist. Might have been deleted."
             return Response(error, status.HTTP_400_BAD_REQUEST)
+
+
+class CreateRetrieveUpdateDeleteBudget(APIView):
+    permission_classes = (IsContributor, IsOwnerOrReadOnly)
+
+    def post(self, request, project_id=None, format=None):
+
+        try:
+            project = Project.objects.get(id=project_id)
+        except Project.DoesNotExist:
+            error = "Project does not exist."
+            return Response(error, status=status.HTTP_404_NOT_FOUND)
+        try:
+            budget = Budget.objects.get(project=project)
+            error = "You already have a budget for this project. You can update it."
+            return Response(error, status=status.HTTP_208_ALREADY_REPORTED)
+        except Budget.DoesNotExist:
+            if request.user != project.user:
+                error = "Only a manager can make a budget for the application."
+                return Response(error, status=status.HTTP_401_UNAUTHORIZED)
+            serializer = BudgetSerializer(data=request.data)
+            if serializer.is_valid():
+                serializer.save(project=project)
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            else:
+                error = "Unknown error"
+                return Response(error, status=status.HTTP_404_NOT_FOUND)
+
+    def get(self, request, project_id, format=None):
+        budget = Budget.objects.get(project__id=project_id)
+        serializer = BudgetSerializer(budget)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def patch(self, request, project_id, fromat=None):
+        budget = Budget.objects.get(project__id=project_id)
+        serializer = BudgetSerializer(budget, data=request.data)
+        if request.user != budget.project.user:
+            error = "Only project managers/owners can update budget info."
+            return Response(error, status=status.HTTP_401_UNAUTHORIZED)
+        if serializer.is_valid():
+            from_amount = budget.amount
+            to_amount = request.data["amount"]
+            new_history = BudgetHistory.objects.create(
+                budget=budget, from_amount=from_amount, to_amount=to_amount
+            )
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_202_ACCEPTED)
+        error = "Unknown error"
+        return Response(error, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(["GET", "DELETE"])
+def budget_history(request, project_id, history_id=None):
+    if request.method == "GET":
+        history = BudgetHistory.objects.filter(budget__project__id=project_id).order_by(
+            "-date_updated"
+        )
+        serializer = BudgetHistorySerializer(history, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    if request.method == "DELETE":
+        if history_id:
+            try:
+                history = BudgetHistory.objects.get(
+                    budget__project__id=project_id, id=history_id
+                )
+                history.delete()
+                message = "History deleted."
+                return Response(message, status=status.HTTP_200_OK)
+            except BudgetHistory.DoesNotExist:
+                error = "History not found."
+                return Response(error, status=status.HTTP_404_NOT_FOUND)
+    return Response("Unknown error.", status=status.HTTP_302_FOUND)
+
+
+class CreateExpense(APIView):
+    def post(self, request, project_id=None, format=None):
+        try:
+            project = Project.objects.get(id=project_id)
+        except Project.DoesNotExist:
+            error = "Project does not exist."
+            return Response(error, status=status.HTTP_404_NOT_FOUND)
+        test = TestIfContributor(user=request.user, project=project)
+
+        if test.test_is_contributor_or_manager() is not True:
+            error = "You have to be an accepted contributor in order to work on this project."
+            return Response(error, status=status.HTTP_401_UNAUTHORIZED)
+
+        data = request.data
+        data["contributor"] = request.user.id
+        serializer = ExpenseSerializer(data=data)
+        if serializer.is_valid():
+            serializer.save(project=project)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            error = "Unknown error"
+            return Response(error, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(["GET", "PATCH", "DELETE"])
+@permission_classes([IsContributor])
+def expense_detail_update_delete(request, project_id, expense_id):
+    if request.method == "GET":
+        if expense_id:
+            expense = Expense.objects.get(project__id=project_id, id=expense_id)
+            serializer = ExpenseSerializer(expense)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        else:
+            expenses = Expense.objects.filter(project__id=project_id)
+            serializer = ExpenseSerializer(expenses, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+    if request.method == "PATCH":
+        expense = Expense.objects.get(project__id=project_id, id=expense_id)
+        project = Project.objects.get(id=project_id)
+        if request.user == expense.contributor or request.user == project.user:
+            serializer = ExpenseSerializer(expense, data=request.data)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_202_ACCEPTED)
+
+        else:
+            error = "Unauthorized update.You have to either be the spender or the project manager."
+            return Response(error, status=status.HTTP_401_UNAUTHORIZED)
+
+    if request.method == "DELETE":
+        expense = Expense.objects.get(project__id=project_id, id=expense_id)
+        project = Project.objects.get(id=project_id)
+        if request.user == expense.contributor or request.user == project.user:
+            expense.delete()
+            message = "Expense has been deleted."
+            return Response(message, status=status.HTTP_200_OK)
+        else:
+            error = "Only managers and spenders can delete expenses."
+            return Response(error, status=status.HTTP_401_UNAUTHORIZED)
+    error = "Method not allowed"
+    return Response(error, status=status.HTTP_405_METHOD_NOT_ALLOWED)

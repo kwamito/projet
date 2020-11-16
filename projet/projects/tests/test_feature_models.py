@@ -19,4 +19,3 @@ class TestFeatures(TestCase):
             description="First feature",
             name="A new name",
         )
-        print(Feature.objects.all())
