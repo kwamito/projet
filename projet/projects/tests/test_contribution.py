@@ -35,14 +35,14 @@ class TestProjectContributionAPI(APITestCase):
     def test_owner_can_be_contributor(self):
         self.client.force_login(user=self.second_user)
         contribute_url = reverse("contribute", args=[self.second_project.id])
-        response = self.client.post(contribute_url)
+        response = self.client.post(contribute_url, format="json")
 
         self.assertEqual(response.status_code, 403)
 
     def test_contributor_can_offer_twice(self):
         self.client.force_login(user=self.third_user)
         contribute_url = reverse("contribute", args=[self.project.id])
-        response = self.client.post(contribute_url)
+        response = self.client.post(contribute_url, format="json")
         self.assertEqual(response.status_code, 400)
 
     def test_manager_can_accept_contribution(self):
@@ -51,7 +51,7 @@ class TestProjectContributionAPI(APITestCase):
             "accept-contribution", args=[self.project.id, self.contribution.id]
         )
 
-        response = self.client.patch(accept_url, data={"accepted": True})
+        response = self.client.patch(accept_url, data={"accepted": True}, format="json")
         cont = Contributor.objects.get(project=self.project.id)
 
         self.assertEqual(response.status_code, 202)
@@ -61,7 +61,9 @@ class TestProjectContributionAPI(APITestCase):
         accept_url = reverse(
             "accept-contribution", args=[self.project.id, self.contribution.id]
         )
-        response = self.client.patch(accept_url, data={"accepted": "true"})
+        response = self.client.patch(
+            accept_url, data={"accepted": "true"}, format="json"
+        )
         cont = Contributor.objects.first()
         print(cont.accepted)
         self.assertEqual(response.status_code, 403)

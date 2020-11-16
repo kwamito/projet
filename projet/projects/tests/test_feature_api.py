@@ -45,72 +45,74 @@ class TestFeaturesAPI(APITestCase):
     def test_manager_can_create_features(self):
         self.client.force_login(user=self.user)
         data = {"name": "Users Profile"}
-        response = self.client.post(self.create_features, data=data)
+        response = self.client.post(self.create_features, data=data, format="json")
         self.assertEqual(response.status_code, 201)
 
     def test_non_manager_can_create_features(self):
         self.client.force_login(user=self.contributing_user)
-        response = self.client.post(self.create_features, data={"name": "New one"})
+        response = self.client.post(
+            self.create_features, data={"name": "New one"}, format="json"
+        )
         self.assertEqual(response.status_code, 201)
 
     def test_non_contributor_can_create_features(self):
         self.client.force_login(user=self.second_user)
         response = self.client.post(
-            self.create_features, data={"name": "A new pro pro"}
+            self.create_features, data={"name": "A new pro pro"}, format="json"
         )
         self.assertEqual(response.status_code, 401)
 
     def test_unaccepted_contributor_can_create_features(self):
         self.client.force_login(user=self.unaccepted_contributor)
         response = self.client.post(
-            self.create_features, data={"name": "A new pro pro"}
+            self.create_features, data={"name": "A new pro pro"}, format="json"
         )
         self.assertEqual(response.status_code, 401)
 
     def test_non_owner_can_delete_feature(self):
         feature_delete_url = reverse("delete-feature", args=[self.first_feature.id])
         self.client.force_login(user=self.second_user)
-        response = self.client.delete(feature_delete_url)
+        response = self.client.delete(feature_delete_url, format="json")
         self.assertEqual(response.status_code, 401)
 
     def test_owner_can_delete_feature(self):
         feature_delete_url = reverse("delete-feature", args=[self.first_feature.id])
         self.client.force_login(user=self.feature_creator)
-        response = self.client.delete(feature_delete_url)
+        response = self.client.delete(feature_delete_url, format="json")
         self.assertEqual(response.status_code, 200)
 
     def test_manager_can_delete_feature(self):
         feature_delete_url = reverse("delete-feature", args=[self.first_feature.id])
         self.client.force_login(user=self.user)
-        response = self.client.delete(feature_delete_url)
+        response = self.client.delete(feature_delete_url, format="json")
         self.assertEqual(response.status_code, 200)
 
     def test_contributor_can_review_own_feature(self):
         feature_review_url = reverse("review-feature", args=[self.first_feature.id])
         self.client.force_login(user=self.feature_creator)
-        response = self.client.patch(feature_review_url)
+        response = self.client.patch(feature_review_url, format="json")
         self.assertEqual(response.status_code, 401)
 
     def test_manager_can_review_feature(self):
         feature_review_url = reverse("review-feature", args=[self.first_feature.id])
         self.client.force_login(user=self.user)
-        response = self.client.patch(feature_review_url)
+        response = self.client.patch(feature_review_url, format="json")
         self.assertEqual(response.status_code, 202)
 
     def test_contributor_can_approve_own_feature(self):
         approve_url = reverse("approve-feature", args=[self.first_feature.id])
         self.client.force_login(user=self.feature_creator)
-        response = self.client.patch(approve_url)
+        response = self.client.patch(approve_url, format="json")
         self.assertEqual(response.status_code, 401)
 
     def test_unreviewed_feature_can_be_approved(self):
         approve_url = reverse("approve-feature", args=[self.first_feature.id])
         self.client.force_login(user=self.user)
-        response = self.client.patch(approve_url)
+        response = self.client.patch(approve_url, format="json")
         self.assertEqual(response.status_code, 406)
 
     def test_manager_can_approve_feature(self):
         approve_url = reverse("approve-feature", args=[self.second_feature.id])
         self.client.force_login(user=self.user)
-        response = self.client.patch(approve_url)
+        response = self.client.patch(approve_url, format="json")
         self.assertEqual(response.status_code, 202)
