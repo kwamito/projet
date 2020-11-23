@@ -193,3 +193,27 @@ class Expense(models.Model):
         max_digits=14, decimal_places=2, default_currency="USD", null=True, blank=True
     )
     date_expended = models.DateTimeField(default=timezone.now())
+
+
+class PersonalBudget(models.Model):
+    name = models.CharField(max_length=210, blank=False, null=False)
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="personal_budgets"
+    )
+    description = models.TextField(blank=True, null=True)
+    amount = MoneyField(
+        max_digits=14, decimal_places=2, default_currency="USD", null=True, blank=True
+    )
+    date_created = models.DateTimeField(auto_now_add=True)
+
+
+class PersonalExpense(models.Model):
+    budget = models.ForeignKey(
+        PersonalBudget, on_delete=models.CASCADE, related_name="expenses"
+    )
+    name = models.CharField(max_length=210, null=False, blank=False)
+    description = models.TextField(blank=True, null=True)
+    amount = MoneyField(
+        max_digits=14, decimal_places=2, default_currency="USD", null=True, blank=True
+    )
+    date_created = models.DateTimeField(auto_now_add=True)

@@ -18,3 +18,8 @@ class TestIfContributor:
             return False
         else:
             return True
+
+    def test_is_owner_of_feature_and_manager(self, feature):
+        if self.user != feature.contributor or self.user != self.project.user:
+            return False
+        return True

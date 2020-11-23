@@ -1,5 +1,13 @@
 from rest_framework import serializers
-from .models import Project, Feature, Budget, BudgetHistory, Expense
+from .models import (
+    Project,
+    Feature,
+    Budget,
+    BudgetHistory,
+    Expense,
+    PersonalBudget,
+    PersonalExpense,
+)
 from users.models import Contributor
 from users.serializers import ContributorSerializer
 
@@ -10,6 +18,7 @@ class FeatureSerializer(serializers.ModelSerializer):
     class Meta:
         model = Feature
         fields = (
+            "id",
             "contributor",
             "project",
             "name",
@@ -82,10 +91,12 @@ class ProjectSerializer(serializers.ModelSerializer):
     budget = BudgetSerializer(many=True, required=False)
     expense = ExpenseSerializer(required=False, many=True, read_only=False)
     spendings = ExpenseSerializer(many=True, required=False)
+    id = serializers.IntegerField(read_only=False, required=False)
 
     class Meta:
         model = Project
         fields = (
+            "id",
             "manager",
             "title",
             "is_public",
@@ -105,3 +116,17 @@ class ProjectSerializer(serializers.ModelSerializer):
             "over_budget_by",
             "over_budget_by_percentage",
         )
+
+
+class PersonalBudgetSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(required=False)
+
+    class Meta:
+        model = PersonalBudget
+        fields = ("name", "description", "amount", "date_created")
+
+
+class PersonalExpenseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PersonalExpense
+        fields = ("name", "description", "amount", "date_created", "budget")

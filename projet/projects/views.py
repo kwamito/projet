@@ -5,7 +5,15 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from users.models import User, Contributor
-from .models import Project, Feature, Budget, BudgetHistory, Expense
+from .models import (
+    Project,
+    Feature,
+    Budget,
+    BudgetHistory,
+    Expense,
+    PersonalBudget,
+    PersonalExpense,
+)
 from users.permissions import IsOwnerOrReadOnly
 from .serializers import (
     ProjectSerializer,
@@ -13,6 +21,8 @@ from .serializers import (
     BudgetSerializer,
     BudgetHistorySerializer,
     ExpenseSerializer,
+    PersonalBudgetSerializer,
+    PersonalExpenseSerializer,
 )
 from rest_framework import status
 from users.serializers import ContributorSerializer
@@ -21,7 +31,10 @@ import json
 from django.utils import timezone
 from django.core.exceptions import ValidationError, SuspiciousOperation
 from projects.custom_permissions import TestIfContributor
-
+from rest_framework import viewsets
+from rest_framework.decorators import action
+from rest_framework.exceptions import NotFound
+from django.db.models import Q
 
 # Create your views here.
 class ProjectCreateAPI(generics.ListCreateAPIView):
@@ -33,15 +46,15 @@ class ProjectCreateAPI(generics.ListCreateAPIView):
         serializer.save(user=self.request.user)
 
 
-class ProjectDetailUpdateDelete(generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
+class UsersProjectsList(generics.ListAPIView):
     serializer_class = ProjectSerializer
 
     def get_queryset(self):
         return Project.objects.filter(user=self.request.user)
 
 
-class UsersProjectsList(generics.ListAPIView):
+class ProjectDetailUpdateDelete(generics.RetrieveUpdateDestroyAPIView):
+    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
     serializer_class = ProjectSerializer
 
     def get_queryset(self):
@@ -142,6 +155,11 @@ class CreateFeature(APIView):
             return Response(error, status=status.HTTP_400_BAD_REQUEST)
         error = "Method not allowed"
         return Response(error, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def get(self, request, project_id, format=None):
+        features = Feature.objects.filter(project__id=project_id)
+        serializer = FeatureSerializer(features, many=True)
+        return Response(serializer.data, status=status.HTTP_202_ACCEPTED)
 
 
 class FeatureDetail(generics.RetrieveUpdateDestroyAPIView):
@@ -304,6 +322,18 @@ class CreateRetrieveUpdateDeleteBudget(APIView):
         return Response(error, status=status.HTTP_404_NOT_FOUND)
 
 
+@api_view(["GET"])
+def history(request, project_id):
+    if request.method == "GET":
+        history = BudgetHistory.objects.filter(budget__project__id=project_id).order_by(
+            "-date_updated"
+        )
+        serializer = BudgetHistorySerializer(history, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    else:
+        return Response("error", status=status.HTTP_400_BAD_REQUEST)
+
+
 @api_view(["GET", "DELETE"])
 def budget_history(request, project_id, history_id=None):
     if request.method == "GET":
@@ -389,3 +419,120 @@ def expense_detail_update_delete(request, project_id, expense_id):
             return Response(error, status=status.HTTP_401_UNAUTHORIZED)
     error = "Method not allowed"
     return Response(error, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+
+@api_view(["GET", "POST"])
+def create_personal_budget(request):
+    if request.method == "POST":
+        data = request.data
+        data["user"] = request.user.id
+        serializer = PersonalBudgetSerializer(data=data)
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            error = "Some error"
+            return Response(error, status=status.HTTP_400_BAD_REQUEST)
+        return Response("Unknown error", status=status.HTTP_302_FOUND)
+
+
+@api_view(["DELETE", "GET", "PATCH"])
+def update_get_delete_personal_budget(request, budget_id):
+    if request.method == "PATCH":
+        budget = PersonalBudget.objects.get(id=budget_id, user=request.user)
+        request.data["user"] = request.user.id
+        serializer = PersonalBudgetSerializer(budget, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_202_ACCEPTED)
+        else:
+            error = "error"
+            return Response(error, status=status.HTTP_403_FORBIDDEN)
+
+    if request.method == "DELETE":
+        budget = PersonalBudget.objects.get(id=budget_id, user=request.user)
+        if request.user == budget.user:
+            budget.delete()
+            message = "Deleted"
+            return Response(message, status=status.HTTP_200_OK)
+
+        else:
+            return Response("Unkown error", status=status.HTTP_400_BAD_REQUEST)
+
+    if request.method == "GET":
+        budget = PersonalBudget.objects.get(id=budget_id, user=request.user)
+        serializer = PersonalBudgetSerializer(budget)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+def list_users_personal_budgets(request):
+    budget = PersonalBudget.objects.filter(user=request.user).order_by("-date_created")
+    if budget.exists() != True:
+        message = "You have no budgets yet. You can create them."
+    else:
+        serializer = PersonalBudgetSerializer(budget, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+def create_personal_expense(request, budget_id):
+    if request.method == "POST":
+        budget = PersonalBudget.objects.get(id=budget_id)
+        serializer = PersonalExpenseSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(budget=budget)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            error = "Unknown error"
+            return Response(error, status=status.HTTP_201_CREATED)
+
+
+@api_view(["DELETE", "GET", "PATCH"])
+def get_delete_update_expenses(request, expense_id):
+    expense = PersonalExpense.objects.get(id=expense_id)
+    if request.method == "PATCH":
+
+        if expense.budget.user == request.user:
+            serializer = PersonalExpenseSerializer(expense, data=request.data)
+            serializer.save()
+        else:
+            error = "You do not own this expense"
+            return Response(error, status=status.HTTP_401_UNAUTHORIZED)
+
+    if request.method == "GET":
+        serializer = PersonalExpenseSerializer(expense)
+        if request.user == expense.budget.user:
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        error = "You do not own this expense."
+        return Response(error, status=status.HTTP_401_UNAUTHORIZED)
+
+    if request.method == "DELETE":
+        if request.user == expense.budget.user:
+            expense.delete()
+            message = f"You have deleted {expense.name}"
+            return Response(message, status=status.HTTP_200_OK)
+        else:
+            error = "You cannot delete someone else's expense."
+            return Response(error, status=status.HTTP_401_UNAUTHORIZED)
+
+
+@api_view(["GET"])
+def list_expenses_by_budget(request, budget_id):
+    expenses = PersonalExpense.objects.filter(
+        budget__id=budget_id, budget__user=request.user.id
+    )
+    if expenses.exists() is not True:
+        raise NotFound(detail="This budget doesn't have any expenses yet.")
+    seriailizer = PersonalExpenseSerializer(expenses, many=True)
+    return Response(seriailizer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+def get_all_personal_expenses(request):
+    expenses = PersonalExpense.objects.filter(budget__user=request.user)
+    if expenses.exists() is not True:
+        raise NotFound(detail="You don't have any expenses yet")
+    serializer = PersonalExpenseSerializer(expenses, many=True)
+    return Response(serializer.data, status=status.HTTP_200_OK)
