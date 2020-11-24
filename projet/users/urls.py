@@ -17,10 +17,13 @@ from django.contrib import admin
 from django.urls import path, include
 from users import views
 from users.views import LoginApiView
+from rest_framework import routers
+
+router = routers.SimpleRouter()
 
 urlpatterns = [
     path("login/", LoginApiView.as_view(), name="login"),
     path("create/", views.UserCreate.as_view(), name="create"),
     path("list-users/", views.ListUsers.as_view(), name="list-users"),
-    path("profile/<int:pk>/", views.ProfileList.as_view(), name="profile"),
+    path("profile/", views.ProfileList.as_view(), name="profile"),
 ]

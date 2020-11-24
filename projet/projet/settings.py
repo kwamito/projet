@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework.authtoken",
     "djmoney",
+    "rest_framework_extensions",
     # Local Apps
     "users",
     "projects",

@@ -100,5 +100,10 @@ class ListUsers(generics.ListAPIView):
 
 class ProfileList(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
-    queryset = Profile.objects.all()
     serializer_class = ProfileSerializer
+
+    def get_object(self):
+        return Profile.objects.get(user=self.request.user)
+
+    def get_queryset(self):
+        return self.get_object()

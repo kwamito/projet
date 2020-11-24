@@ -1,6 +1,11 @@
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, include
 from . import views
+from rest_framework import routers
+from rest_framework.schemas import get_schema_view
+from django.views.generic import TemplateView
+from rest_framework.routers import Route, DynamicRoute, SimpleRouter
+from rest_framework_extensions.routers import ExtendedSimpleRouter
 
 
 urlpatterns = [
@@ -28,14 +33,6 @@ urlpatterns = [
     ),
     path("contribute/<int:project_id>/", views.contribute, name="contribute"),
     path(
-        "create-feature/<int:project_id>/",
-        views.CreateFeature.as_view(),
-        name="feature-create",
-    ),
-    path(
-        "feature-delete/<int:feature_id>/", views.delete_feature, name="delete-feature"
-    ),
-    path(
         "approve-feature/<int:feature_id>/",
         views.approve_feature,
         name="approve-feature",
@@ -48,7 +45,6 @@ urlpatterns = [
         views.merge_features_documentation,
         name="merge-feature",
     ),
-    path("feature/<int:pk>/", views.FeatureDetail.as_view(), name="feature-detail"),
     path(
         "budget-create/<int:project_id>/",
         views.CreateRetrieveUpdateDeleteBudget.as_view(),
@@ -68,5 +64,40 @@ urlpatterns = [
         "expense/<int:project_id>/<int:expense_id>/",
         views.expense_detail_update_delete,
         name="expense-detail-delete",
+    ),
+    path("personal-budget/", views.create_personal_budget, name="personal-budget"),
+    path(
+        "update-budget/<int:budget_id>/",
+        views.update_get_delete_personal_budget,
+        name="something",
+    ),
+    path("all-personal/", views.list_users_personal_budgets),
+    path("create-expense/<int:budget_id>/", views.create_personal_expense),
+    path(
+        "create-feature/<int:project_id>/",
+        views.CreateFeature.as_view(),
+        name="feature-create",
+    ),
+    path(
+        "feature-delete/<int:feature_id>/", views.delete_feature, name="delete-feature"
+    ),
+    path(
+        "swagger-ui/",
+        TemplateView.as_view(
+            template_name="swagger-ui.html",
+            extra_context={"schema_url": "projetapi-schema"},
+        ),
+        name="swagger-ui",
+    ),
+    path("history/<int:project_id>/", views.history),
+    path(
+        "personal-expenses/<int:expense_id>/delete-update/",
+        views.get_delete_update_expenses,
+    ),
+    path("all-expenses/me/", views.get_all_personal_expenses, name="my-expenses"),
+    path(
+        "budget-expenses/<int:budget_id>/",
+        views.list_expenses_by_budget,
+        name="personal-budget-expenses",
     ),
 ]
