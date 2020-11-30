@@ -26,11 +26,11 @@ from .serializers import (
 )
 from rest_framework import status
 from users.serializers import ContributorSerializer
-from users.permissions import IsOwnerOrAdminOfProject, IsContributor, IsOwnerOrReadOnly
+from users.permissions import IsOwnerOrAdminOfProject, IsOwnerOrReadOnly
 import json
 from django.utils import timezone
 from django.core.exceptions import ValidationError, SuspiciousOperation
-from projects.custom_permissions import TestIfContributor
+from projects.custom_permissions import TestIfContributor, IsContributorOrDeny
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound
@@ -53,12 +53,40 @@ class UsersProjectsList(generics.ListAPIView):
         return Project.objects.filter(user=self.request.user)
 
 
-class ProjectDetailUpdateDelete(generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
-    serializer_class = ProjectSerializer
+class ProjectDetailUpdateDelete(APIView):
+    def get(self, request, pk):
+        project = Project.objects.get(id=pk)
+        test = TestIfContributor(user=request.user, project_id=project.id)
+        if test.test_is_contributor_or_manager() == True:
+            serializer = ProjectSerializer(project)
+            return Response(serializer.data, status=status.HTTP_202_ACCEPTED)
+        error = "You are not a contributor to this project"
+        return Response(error, status=status.HTTP_401_UNAUTHORIZED)
 
-    def get_queryset(self):
-        return Project.objects.filter(user=self.request.user)
+    def delete(self, request, pk):
+        project = Project.objects.get(id=pk)
+        if request.user == project.user:
+            project.delete()
+            message = f"{project.title} has been deleted."
+            return Response(message, status=status.HTTP_200_OK)
+        else:
+            return Response(
+                "You are not the owner of this project",
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+    def patch(self, request, pk):
+        project = Project.objects.get(id=pk)
+        if request.user == project.user:
+            seriailizer = ProjectSerializer(project, data=request.data)
+            if seriailizer.is_valid():
+                seriailizer.save()
+                return Response(seriailizer.data, status=status.HTTP_200_OK)
+        else:
+            return Response(
+                "You are not the owner of this project",
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
 
 
 class AcceptContributor(generics.RetrieveUpdateDestroyAPIView):
@@ -69,35 +97,12 @@ class AcceptContributor(generics.RetrieveUpdateDestroyAPIView):
     def perform_update(self, serializer):
         serializer.save(accepted_by=self.request.user, date_accepted=timezone.now())
 
-    def patch(self, request, project_id=None, contributor_id=None):
-        contributor = Contributor.objects.get(id=contributor_id, project__id=project_id)
-        if request.user == contributor.user:
-            error = "You cannot accept yourself"
-            return Response(error, status=status.HTTP_403_FORBIDDEN)
-
-        contributor.accepted = True
-        contributor.save()
-        return Response(
-            f"You have accepted {contributor.user} to contribute to {contributor.project.title}.",
-            status=status.HTTP_202_ACCEPTED,
-        )
-
-
-@api_view(["POST"])
-def contribute(request, project_id):
-    if request.method == "POST":
-        project = Project.objects.get(id=project_id)
-        if request.user == project.user:
-            error = "You are the owner of the project, you cannot become a contributor."
-            return Response(error, status=status.HTTP_403_FORBIDDEN)
-        try:
-            contributor = Contributor.objects.get(user=request.user, project=project)
-            error = f"You have already requested to contribute to {project.title}. If you have not been accepted yet wait."
-            return Response(error, status=status.HTTP_400_BAD_REQUEST)
-        except Contributor.DoesNotExist:
-            contributor = Contributor.objects.create(user=request.user, project=project)
-        jsons = f"You have sent a request to contribute to {project.title}. You'll have to wait to be accepted to start contribution."
-        return Response(jsons, status=status.HTTP_400_BAD_REQUEST)
+    def patch(self, request, project_id=None):
+        contribution = self.request.user.contributions.get(project__id=project_id)
+        contribution.accepted = True
+        contribution.date_accepted = timezone.now()
+        contribution.save()
+        return Response("accepted", status=status.HTTP_202_ACCEPTED)
 
 
 @api_view(["GET", "POST", "PATCH"])
@@ -180,7 +185,12 @@ def delete_feature(request, feature_id=None):
             feature = Feature.objects.get(id=feature_id)
 
             project = feature.project
-            if request.user == feature.contributor or request.user == project.user:
+            check_feature_owner = TestIfContributor(user=request.user, project=project)
+            if (
+                check_feature_owner.test_is_owner_of_feature_and_manager(feature)
+                == True
+            ):
+
                 feature.delete()
                 return Response(
                     f"{feature.name} has been deleted from {project.title}",
@@ -274,7 +284,7 @@ def merge_features_documentation(request, feature_id):
 
 
 class CreateRetrieveUpdateDeleteBudget(APIView):
-    permission_classes = (IsContributor, IsOwnerOrReadOnly)
+    permission_classes = [IsOwnerOrReadOnly]
 
     def post(self, request, project_id=None, format=None):
 
@@ -382,7 +392,6 @@ class CreateExpense(APIView):
 
 
 @api_view(["GET", "PATCH", "DELETE"])
-@permission_classes([IsContributor])
 def expense_detail_update_delete(request, project_id, expense_id):
     if request.method == "GET":
         if expense_id:

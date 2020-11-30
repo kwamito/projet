@@ -26,4 +26,5 @@ urlpatterns = [
     path("create/", views.UserCreate.as_view(), name="create"),
     path("list-users/", views.ListUsers.as_view(), name="list-users"),
     path("profile/", views.ProfileList.as_view(), name="profile"),
+    path("send-invite/", views.invite, name="invite"),
 ]

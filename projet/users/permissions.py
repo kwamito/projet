@@ -1,4 +1,6 @@
 from rest_framework import permissions
+from .models import Contributor
+from projects.models import Project
 
 
 class IsOwnerOrReadOnly(permissions.BasePermission):
@@ -22,8 +24,6 @@ class IsAllowedToSeeContributors(permissions.BasePermission):
             return True
         return request.user in obj.contributors
 
-
-class IsContributor(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         if request.method in permissions.SAFE_METHODS:
             return True

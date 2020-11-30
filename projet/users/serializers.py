@@ -23,6 +23,12 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ("id", "email", "password", "image")
 
 
+class UserBulkSerializer(serializers.Serializer):
+    email = serializers.EmailField(read_only=True)
+    image = serializers.ImageField(read_only=True, source="profile.image")
+    bio = serializers.CharField(read_only=True, source="profile.bio")
+
+
 class UserValidateSerializer(serializers.ModelSerializer):
     def validate(self, validated_data):
         print("Validated data is {}".format(validated_data))

@@ -40,4 +40,4 @@ class TestProjectsAPI(APITestCase):
         self.client.force_login(user=self.user)
         update_url = reverse("update-delete", args=[self.new_project.id])
         response = self.client.patch(update_url, data={"title": "Changed"})
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 401)

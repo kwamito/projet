@@ -9,13 +9,22 @@ from rest_framework import mixins, generics
 from django.http import HttpResponse, JsonResponse
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework import status
-from .models import User, Profile
+from .models import User, Profile, Contributor
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
 from django.contrib.auth.hashers import check_password
-from .serializers import UserSerializer, UserValidateSerializer, ProfileSerializer
+from .serializers import (
+    UserSerializer,
+    UserValidateSerializer,
+    ProfileSerializer,
+    UserBulkSerializer,
+)
 from .permissions import IsOwnerOrReadOnly
-
+from rest_framework import filters
+from django.core.mail import send_mail
+from django.conf import settings
+from projects.models import Project
+from django.shortcuts import get_object_or_404
 
 # Create your views here.
 class UserCreate(APIView):
@@ -94,8 +103,59 @@ class ListUsers(generics.ListAPIView):
     to add another permissions apart from the IsAuthenticated
     """
 
+    search_fields = ["email", "first_name", "last_name"]
+    filter_backends = (filters.SearchFilter,)
+
     queryset = User.objects.all()
-    serializer_class = UserSerializer
+    serializer_class = UserBulkSerializer
+
+
+def send_invite(project, recipient, sender=None):
+    send_mail(
+        "Projet",
+        f"You have been asked by {sender.email} to contribute to {project.title}. Accept at 127.0.0.1:8000/{project.id}/",
+        recipient_list=[recipient.email],
+        from_email=settings.EMAIL_HOST,
+    )
+
+    Contributor.objects.create(user=recipient, project=project)
+    return "Email sent"
+
+
+@api_view(["POST"])
+def invite(request):
+    if request.method == "POST":
+
+        project_id = request.data["id"]
+        project = Project.objects.get(id=int(project_id))
+        if project.user != request.user:
+            error = "Only project owners/managers can send invites"
+            return Response(error, status=status.HTTP_401_UNAUTHORIZED)
+        recipient_email = request.data["email"]
+        recipient = User.objects.filter(email=recipient_email)
+        if request.user == recipient[0]:
+            error = "You are trying to invite yourself to this project"
+            return Response(error, status=status.HTTP_401_UNAUTHORIZED)
+
+        if request.user == recipient:
+            error = "You are the owner/manager of this project."
+            return Response(error, status=status.HTTP_400_BAD_REQUEST)
+        recipient_contribution = recipient[0].contributions.filter(project=project)
+
+        if recipient_contribution in project.contributors.all():
+            error = f"{recipient.email} has already been invited"
+            return Response(error, status=status.HTTP_400_BAD_REQUEST)
+        if recipient.exists() is False:
+            error = "User needs to have an account."
+            return Response(error, status=status.HTTP_400_BAD_REQUEST)
+
+        is_contributor = Contributor.objects.filter(user=recipient[0], project=project)
+        if is_contributor.exists() == True:
+            error = "This user has already been invited"
+            return Response(error, status=status.HTTP_400_BAD_REQUEST)
+
+        res = send_invite(project=project, recipient=recipient[0], sender=request.user)
+        return Response(res, status=status.HTTP_201_CREATED)
 
 
 class ProfileList(generics.RetrieveUpdateDestroyAPIView):

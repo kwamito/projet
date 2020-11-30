@@ -7,8 +7,11 @@ celery==4.4.7
 click==7.1.2
 dataclasses==0.7
 Django==3.1.2
+django-cacheops==5.1
 django-money==1.1
 djangorestframework==3.12.1
+drf-extensions @ https://github.com/chibisov/drf-extensions/archive/master.zip
+funcy==1.15
 importlib-metadata==2.0.0
 kombu==4.6.11
 mypy-extensions==0.4.3
@@ -16,10 +19,14 @@ pathspec==0.8.0
 Pillow==8.0.1
 py-moneyed==0.8.0
 pytz==2020.1
+PyYAML==5.3.1
+redis==3.5.3
 regex==2020.10.23
+six==1.15.0
 sqlparse==0.4.1
 toml==0.10.1
 typed-ast==1.4.1
 typing-extensions==3.7.4.3
+uritemplate==3.0.1
 vine==1.3.0
 zipp==3.4.0
