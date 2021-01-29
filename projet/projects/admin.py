@@ -7,6 +7,8 @@ from .models import (
     Expense,
     PersonalBudget,
     PersonalExpense,
+    Task,
+    Team,
 )
 
 # Register your models here.
@@ -17,3 +19,5 @@ admin.site.register(BudgetHistory)
 admin.site.register(Expense)
 admin.site.register(PersonalBudget)
 admin.site.register(PersonalExpense)
+admin.site.register(Task)
+admin.site.register(Team)

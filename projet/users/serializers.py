@@ -11,16 +11,24 @@ class UserSerializer(serializers.ModelSerializer):
     )
     password = serializers.CharField(min_length=8)
     image = serializers.ImageField(source="profile.image", required=False)
+    first_name = serializers.CharField(max_length=20)
+    last_name = serializers.CharField(max_length=20)
 
     def create(self, validated_data):
+        print(validated_data)
         user = User.objects._create_user(
-            validated_data["email"], validated_data["password"], False, False
+            validated_data["email"],
+            validated_data["password"],
+            False,
+            False,
+            first_name=validated_data["first_name"],
+            last_name=validated_data["last_name"],
         )
         return user
 
     class Meta:
         model = User
-        fields = ("id", "email", "password", "image")
+        fields = ("id", "email", "password", "first_name", "last_name", "image")
 
 
 class UserBulkSerializer(serializers.Serializer):
