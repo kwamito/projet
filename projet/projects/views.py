@@ -13,6 +13,8 @@ from .models import (
     Expense,
     PersonalBudget,
     PersonalExpense,
+    Task,
+    Team,
 )
 from users.permissions import IsOwnerOrReadOnly
 from .serializers import (
@@ -23,6 +25,9 @@ from .serializers import (
     ExpenseSerializer,
     PersonalBudgetSerializer,
     PersonalExpenseSerializer,
+    TaskSerializer,
+    TeamSerializer,
+    ProjectDocumentationSerializer,
 )
 from rest_framework import status
 from users.serializers import ContributorSerializer
@@ -30,33 +35,53 @@ from users.permissions import IsOwnerOrAdminOfProject, IsOwnerOrReadOnly
 import json
 from django.utils import timezone
 from django.core.exceptions import ValidationError, SuspiciousOperation
-from projects.custom_permissions import TestIfContributor, IsContributorOrDeny
+from projects.custom_permissions import (
+    TestIfContributor,
+    IsContributorOrDeny,
+    TaskPermissions,
+)
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound
 from django.db.models import Q
+from datetime import timedelta
 
 # Create your views here.
 class ProjectCreateAPI(generics.ListCreateAPIView):
     queryset = Project.objects.filter(is_public=True)
     serializer_class = ProjectSerializer
-    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
+    permission_classes = [IsAuthenticated]
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+
+
+class ProjectDocumentation(APIView):
+    def get(self, request, project_id):
+        project = Project.objects.get(id=int(project_id))
+        serializer = ProjectDocumentationSerializer(project)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class UsersProjectsList(generics.ListAPIView):
     serializer_class = ProjectSerializer
 
     def get_queryset(self):
-        return Project.objects.filter(user=self.request.user)
+        return Project.objects.filter(user=self.request.user).order_by("-created")
+
+
+class ProjectDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = ProjectSerializer
+    model = Project
+
+    def get_queryset(self):
+        return Project.objects.all()
 
 
 class ProjectDetailUpdateDelete(APIView):
     def get(self, request, pk):
         project = Project.objects.get(id=pk)
-        test = TestIfContributor(user=request.user, project_id=project.id)
+        test = TestIfContributor(user=request.user, project=project)
         if test.test_is_contributor_or_manager() == True:
             serializer = ProjectSerializer(project)
             return Response(serializer.data, status=status.HTTP_202_ACCEPTED)
@@ -89,20 +114,26 @@ class ProjectDetailUpdateDelete(APIView):
             )
 
 
+# Should be renamed to accept invitation
 class AcceptContributor(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = ContributorSerializer
-    permission_classes = [IsAuthenticated, IsOwnerOrAdminOfProject, IsOwnerOrReadOnly]
+    permission_classes = [
+        IsAuthenticated,
+    ]
     queryset = Contributor.objects.all()
-
-    def perform_update(self, serializer):
-        serializer.save(accepted_by=self.request.user, date_accepted=timezone.now())
 
     def patch(self, request, project_id=None):
         contribution = self.request.user.contributions.get(project__id=project_id)
-        contribution.accepted = True
-        contribution.date_accepted = timezone.now()
-        contribution.save()
-        return Response("accepted", status=status.HTTP_202_ACCEPTED)
+
+        project = Project.objects.get(id=project_id)
+
+        if contribution:
+            contribution.accepted = True
+            contribution.date_accepted = timezone.now()
+            contribution.save()
+            return Response("accepted", status=status.HTTP_202_ACCEPTED)
+        else:
+            return Response("Not invited.", status=status.HTTP_401_UNAUTHORIZED)
 
 
 @api_view(["GET", "POST", "PATCH"])
@@ -390,6 +421,11 @@ class CreateExpense(APIView):
             error = "Unknown error"
             return Response(error, status=status.HTTP_404_NOT_FOUND)
 
+    def get(self, request, project_id, fomat=None):
+        expenses = Expense.objects.filter(project__id=int(project_id))
+        serializer = ExpenseSerializer(expenses, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
 
 @api_view(["GET", "PATCH", "DELETE"])
 def expense_detail_update_delete(request, project_id, expense_id):
@@ -545,3 +581,95 @@ def get_all_personal_expenses(request):
         raise NotFound(detail="You don't have any expenses yet")
     serializer = PersonalExpenseSerializer(expenses, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class CreateTasksView(APIView):
+    def post(self, request, project_id, format=None):
+        project = Project.objects.get(id=project_id)
+        test = TestIfContributor(request.user, project)
+        if test.test_is_manager() == True:
+            data = request.data
+            data["project"] = project.id
+            print(data)
+            serializer = TaskSerializer(data=data)
+            if serializer.is_valid():
+                serializer.save(project=project)
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            return Response(
+                serializer.error_messages, status=status.HTTP_400_BAD_REQUEST
+            )
+        else:
+            error = "You have to be the manager of this project to create tasks."
+            return Response(error, status=status.HTTP_401_UNAUTHORIZED)
+
+    def get(self, request, project_id, format=None):
+        project = Project.objects.get(id=project_id)
+        tasks = Task.objects.filter(project=project).order_by("-date_created")
+        serializer = TaskSerializer(tasks, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class DetailDeleteUpdateTask(APIView):
+    def get(self, request, task_id):
+        task = Task.objects.get(id=task_id)
+        permission = TaskPermissions(request.user, task)
+        if (
+            permission.test_is_assigned_to_task() == True
+            or permission.test_is_manager() == True
+        ):
+            serializer = TaskSerializer(task)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        error = "Not allowed to view"
+        return Response(error, status=status.HTTP_401_UNAUTHORIZED)
+
+    def patch(self, request, task_id):
+        task = Task.objects.get(id=task_id)
+        if request.user == task.project.user:
+
+            serializer = TaskSerializer(task, data=request.data)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+
+            return Response(serializer.error_messages)
+        error = "Not allowed to view"
+        return Response(error, status=status.HTTP_401_UNAUTHORIZED)
+
+    def delete(self, request, task_id):
+        task = Task.objects.get(id=task_id)
+        permission = TaskPermissions(request.user, task)
+        if (
+            permission.test_is_assigned_to_task() == True
+            or permission.test_is_manager() == True
+        ):
+            task.delete()
+            message = "Task deleted."
+            return Response(message, status=status.HTTP_202_ACCEPTED)
+        error = "Only project manager can delete tasks."
+        return Response(error, status=status.HTTP_401_UNAUTHORIZED)
+
+
+class CreateTeamView(APIView):
+    def post(self, request, project_id, format=None):
+        project = Project.objects.get(id=int(project_id))
+        test = TestIfContributor(request.user, project)
+        if test.test_is_manager() == True:
+            request.data["project"] = int(project_id)
+            serializer = TeamSerializer(data=request.data)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            error = "Unauthorized"
+            return Response(error, status=status.HTTP_400_BAD_REQUEST)
+
+    def get(self, request, project_id):
+        teams = Team.objects.filter(project__id=int(project_id))
+        serializer = TeamSerializer(teams, many=True)
+        return Response(serializer.data, status=status.HTTP_202_ACCEPTED)
+
+
+class UpdateTeamView(generics.RetrieveUpdateDestroyAPIView):
+    model = Team
+    serializer_class = TeamSerializer
+    queryset = Team.objects.all()

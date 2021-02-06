@@ -83,7 +83,8 @@ class LoginApiView(APIView):
             user = User.objects.get(email=user_email)
             validator = check_password(user_password, user.password)
         except User.DoesNotExist:
-            return Response(status=status.HTTP_401_UNAUTHORIZED)
+            error = "Account does not exist."
+            return Response(error, status=status.HTTP_401_UNAUTHORIZED)
 
         if validator is not False:
             user = User.objects.get(email=user_email)
@@ -113,7 +114,7 @@ class ListUsers(generics.ListAPIView):
 def send_invite(project, recipient, sender=None):
     send_mail(
         "Projet",
-        f"You have been asked by {sender.email} to contribute to {project.title}. Accept at 127.0.0.1:8000/{project.id}/",
+        f"You have been asked by {sender.email} to contribute to {project.title}. Accept at http://192.168.8.102:3000/accept/6",
         recipient_list=[recipient.email],
         from_email=settings.EMAIL_HOST,
     )

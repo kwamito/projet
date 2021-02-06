@@ -1,5 +1,5 @@
 from users.models import Contributor, User
-from projects.models import Project, Expense, Budget, Feature
+from projects.models import Project, Expense, Budget, Feature, Task
 
 
 class TestIfContributor:
@@ -24,6 +24,11 @@ class TestIfContributor:
             return True
         return False
 
+    def test_is_manager(self):
+        if self.user == self.project.user:
+            return True
+        return False
+
 
 class IsContributorOrDeny:
     def __init__(self, user, project_id):
@@ -41,3 +46,29 @@ class IsContributorOrDeny:
             return True
         except Contributor.DoesNotExist:
             return False
+
+
+class TaskPermissions:
+    def __init__(self, user, task):
+        self.user = user
+        self.task = task
+
+    def test_is_assigned_to_task(self):
+        project = self.task.project
+
+        try:
+            contribution = (
+                self.user.contributions.get(project=project)
+                in self.task.assignees.all()
+            )
+        except Contributor.DoesNotExist:
+            return False
+        if contribution in task.assignees.all():
+            return True
+        return False
+
+    def test_is_manager(self):
+
+        if self.user == self.task.project.user:
+            return True
+        return False

@@ -16,6 +16,7 @@ urlpatterns = [
         views.ProjectDetailUpdateDelete.as_view(),
         name="update-delete",
     ),
+    path("pro/<int:pk>/", views.ProjectDetailView.as_view()),
     path(
         "accept/<int:project_id>/",
         views.AcceptContributor.as_view(),
@@ -99,4 +100,21 @@ urlpatterns = [
         views.list_expenses_by_budget,
         name="personal-budget-expenses",
     ),
+    path(
+        "create-task-list/<int:project_id>/",
+        views.CreateTasksView.as_view(),
+        name="create-tasks-list",
+    ),
+    path(
+        "task-detail-delete/<int:task_id>/",
+        views.DetailDeleteUpdateTask.as_view(),
+        name="detail-task",
+    ),
+    path(
+        "create-team/<int:project_id>/",
+        views.CreateTeamView.as_view(),
+        name="team-create",
+    ),
+    path("update-team/<int:pk>/", views.UpdateTeamView.as_view(), name="update-team"),
+    path("project_doc/<int:project_id>/", views.ProjectDocumentation.as_view()),
 ]

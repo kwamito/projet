@@ -7,6 +7,8 @@ from .models import (
     Expense,
     PersonalBudget,
     PersonalExpense,
+    Task,
+    Team,
 )
 from users.models import Contributor
 from users.serializers import ContributorSerializer
@@ -14,6 +16,9 @@ from users.serializers import ContributorSerializer
 
 class FeatureSerializer(serializers.ModelSerializer):
     documentation = serializers.CharField(required=False)
+    profile_image = serializers.ImageField(
+        required=False, source="contributor.profile.image"
+    )
 
     class Meta:
         model = Feature
@@ -34,6 +39,11 @@ class FeatureSerializer(serializers.ModelSerializer):
             "due_date",
             "priority",
             "votes",
+            "time_since_created",
+            "time_since_reviewed",
+            "time_since_merged",
+            "time_to_due_date",
+            "profile_image",
         )
 
 
@@ -80,7 +90,49 @@ class ExpenseSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Expense
-        fields = ("amount", "description", "contributor", "date_expended")
+        fields = (
+            "amount",
+            "description",
+            "contributor",
+            "date_expended",
+            "contributor_email",
+            "total_expenses",
+        )
+
+
+class TaskSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Task
+        fields = (
+            "name",
+            "description",
+            "start_date",
+            "due_date",
+            "date_created",
+            "completed",
+            "priority",
+            "date_completed",
+            "assignees",
+            "theme",
+            "assignees_names",
+            "total_number_of_assignees",
+            "time_to_due_date",
+            "time_to_start_date",
+        )
+
+
+class TeamSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Team
+        fields = (
+            "name",
+            "contributors",
+            "tasks",
+            "date_created",
+            "project",
+            "contributors_names",
+            "id",
+        )
 
 
 class ProjectSerializer(serializers.ModelSerializer):
@@ -91,7 +143,11 @@ class ProjectSerializer(serializers.ModelSerializer):
     budget = BudgetSerializer(many=True, required=False)
     expense = ExpenseSerializer(required=False, many=True, read_only=False)
     spendings = ExpenseSerializer(many=True, required=False)
+    tasks = TaskSerializer(many=True, required=False)
     id = serializers.IntegerField(read_only=False, required=False)
+    time_since_created = serializers.ReadOnlyField()
+    tasks_completed = serializers.ReadOnlyField()
+    teams = TeamSerializer(many=True, required=False)
 
     class Meta:
         model = Project
@@ -115,6 +171,17 @@ class ProjectSerializer(serializers.ModelSerializer):
             "total_expenditure",
             "over_budget_by",
             "over_budget_by_percentage",
+            "tasks",
+            "time_since_created",
+            "tasks_completed",
+            "tasks_done",
+            "budget_percent",
+            "budget_by_pure_number",
+            "teams",
+            "number_of_completed_tasks",
+            "all_tasks_count",
+            "all_uncompleted_tasks",
+            "weeks_tasks",
         )
 
 
@@ -130,3 +197,7 @@ class PersonalExpenseSerializer(serializers.ModelSerializer):
     class Meta:
         model = PersonalExpense
         fields = ("name", "description", "amount", "date_created", "budget")
+
+
+class ProjectDocumentationSerializer(serializers.Serializer):
+    documentation = serializers.CharField(read_only=False)
